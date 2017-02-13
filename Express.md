@@ -9,7 +9,7 @@ Express app is created by calling the "required" express function:
 const app = require('express')();
 ```
 
-Add middleware and router using `app.use` with optional mounting path:
+Add middlewares and routers using `app.use` with optional mounting path:
 
 ```js
 app.use(morgan('dev'));
@@ -105,16 +105,18 @@ For example, add `bodyParser` to `post` routes instead of all routes.
 
 ## Route and Query Parameters
 
-Url placeholder parametes will be automatically added to the `req.params` property
+Url placeholder parametes will be automatically added to the `req.params` property.
 Url query parameters will be automatically added to the `req.query` property.
 
 ```js
+
 // /api/widgets?type=sprocket&metal=aluminum
 .get('/', (req, res, next) => {
     const type = req.query.type; //"sprocket"
     const metal = req.query.metal; //"aluminum"
     // ...
 })
+
 .get('/:id', (req, res, next) => {
     const id = req.params.id;
     // ...
