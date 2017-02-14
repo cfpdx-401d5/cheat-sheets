@@ -101,7 +101,11 @@ app.use('/api/stores', ensureAuth, stores);
 ```
 
 Use a more selective approach if possible when applying middleware. 
-For example, add `bodyParser` to `post` routes instead of all routes.
+For example, add `bodyParser` to `post` routes instead of all routes:
+
+```js
+.post('/', bodyParser, (req, res, next) => {/*...*/});
+```
 
 ## Route and Query Parameters
 
