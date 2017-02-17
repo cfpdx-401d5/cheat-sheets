@@ -1,13 +1,15 @@
 Express
 ===
 
-## Creating an app
+## Creating an App
 
-Express app is created by calling the "required" express function:
+An express app is created by calling the "required" express function:
 
 ```js
 const app = require('express')();
 ```
+
+### Add Middleware and Routes
 
 Add middlewares and routers using `app.use` with optional mounting path:
 
@@ -20,26 +22,44 @@ const widgets = require('./lib/routes/widgets');
 app.use('/api/widgets', widgets);
 ```
 
+### Add App as Listener to HttpServer
+
 While there is a convience `.listen` method on `app`, we usually export `app` so we
 can manage testing and running the server differently. 
 
-`app` is an http `requestListener` function and can be passed to `http.createServer`.
+`app` is an http `requestListener` function and can be passed to `http.createServer`:
 
-## Starting the server
+```js
+const http = require('http');
+const app = require('./lib/app');
+const server = http.createServer(app);
+```
 
-Call `.listen(port)` on the httpServer.
+### Starting the Server
 
-## Creating a router
+Call `.listen(port)` on the httpServer, using `process.env.PORT` and optionally
+providing a default for development:
+
+```js
+const port = process.env.PORT || 3000;
+
+server.listen(port, () => {
+    console.log('server running', server.address());
+});
+```
+
+## Creating a Router
 
 An Express router is created by calling the `express.Router` function:
 
-```
+```js
 const router = require('express').Router();
 ```
 
-Specific methods can then be added to the router, which will be exported and added to the `app`:
+Specific methods can then be added to the router, which will be exported
+and added to the `app`:
 
-```
+```js
 router
     .get('/', (req, res, next) => {
 
@@ -107,30 +127,127 @@ For example, add `bodyParser` to `post` routes instead of all routes:
 .post('/', bodyParser, (req, res, next) => {/*...*/});
 ```
 
-## Route and Query Parameters
+## Url Paths
 
-Url placeholder parametes will be automatically added to the `req.params` property.
-Url query parameters will be automatically added to the `req.query` property.
+When using the http methods on `app` or `router`, the path is an exact match except
+that it will also match if there is a trailing slash:
 
 ```js
+// matches "/api/weasels" and "/api/weasels/":
 
-// /api/widgets?type=sprocket&metal=aluminum
-.get('/', (req, res, next) => {
-    const type = req.query.type; //"sprocket"
-    const metal = req.query.metal; //"aluminum"
-    // ...
-})
+app.get('/api/weasels', ... );
 
+// does not match: "/api/weasels/foo"
+```
+
+When using a "mounting path" on `app.use`, the path needs to match the 
+_start of the requested path_:
+
+```js
+// matches "/api/weasels", "/api/weasels/", "/api/weasels/foo", etc.
+// basically any request starting with "/api/weasels"
+
+app.use('/api/weasels', weasels);
+```
+
+When adding a router to a use with a mount path, the routes inside the
+router are _supplemental_ to the mounting path:
+
+```js
+// weasels router from previous example
+
+// matches "/api/weasels/ab43b2b2"
+router.get('/:id', ...);
+```
+
+Use a single slash to match the mounting path directly:
+
+```js
+// weasels router from previous example
+
+// matches "/api/weasels" or "/api/weasels/"
+router.get('/', ...);
+```
+
+## Route and Query Parameters
+
+### Parameters
+
+Parameters are dynamic path placeholders that will be automatically added 
+to the `req.params` property.
+
+```js
 .get('/:id', (req, res, next) => {
     const id = req.params.id;
     // ...
 });
 ```
 
-## Handling Errors
+### Query parameters
 
-If your routes could have failures (usually always), you need to include `next` and use 
-it to route errors to the error handler:
+Url query parameters represent refinements to the resource being requested.
+
+Express will be automatically parse and add them to the `req.query` property:
+
+```js
+// /api/widgets?type=sprocket&metal=aluminum
+
+.get('/', (req, res, next) => {
+    const type = req.query.type; //"sprocket"
+    const metal = req.query.metal; //"aluminum"
+    // ...
+})
+```
+
+## Errors
+
+### Error Handler
+
+Data API servers should return JSON error messages, not text or html. To create a custom
+error handler, create a middleware that uses the four parameter function definition: 
+`error, request, response, next`:
+
+```js
+function errorHandler(err, req, res, next) {
+
+    // Default code and error
+    let code = 500, error = 'Internal Server Error';
+
+    // Catch Mongoose Validation Errors
+    if(err.name === 'ValidationError' || err.name === 'CastError') {
+        code = 400;
+        error = err.errors.name.message;
+        console.log(code, error);
+    }
+    // A specific error raised by our code
+    else if(err.code) {
+        // by convention, we're passing in an object
+        // with a code property === http statusCode
+        // and a error property === message to display
+        code = err.code;
+        error = err.error;
+        console.log(code, error);
+    }
+    // An unexpected error
+    // (stays code 500 'Internal Server Error')
+    else {
+        // but log out real error on server
+        console.log(err);
+    }
+
+    res.status(code).send({ error });
+};
+```
+
+Delineate between 400 level codes that deal with requestor issues, 
+and 500 level codes that deal with server errors. Don't forward actual `500`
+error message as it represents an unexpected error and it may
+reveal inner workings of our server that compromise security.
+
+### Routing to the Error Handler
+
+If your routes could have failures (usually always), you need to include `next` 
+and use it to route unexpected (or Mongoose) errors to the error handler:
 
 ```js
 .get('/', (req, res, next) => {
@@ -140,8 +257,17 @@ it to route errors to the error handler:
 });
 ```
 
-Servers that primarily deal in data (JSON requests) should return proper status code 
-(400 level codes deal with requestor issues, 500 level codes deal with server errors)
-with JSON error messages as the response body (not text!).
+`400` level errors are rooted in something wrong with the request and your code
+will identify these errors and send the approriate code and message 
+to the error handler:
 
-
+```js
+.get('/:id', (req, res, next) => {
+    MyModel.findById(req.params.id)
+        .then(model => {
+            if(!model) next({ code: 404, message: `myModel ${req.params.id} not found`)
+            else res.send(model);
+        })
+        .catch(next);
+});
+```
