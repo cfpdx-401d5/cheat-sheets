@@ -1,7 +1,8 @@
 Mongoose
 ===
 
-Mongoose sits ontop of the `mongodb` node.js driver and 
+Mongoose sits ontop of the `mongodb` node.js driver  (meaning it uses it and provides you the developer
+with a different coding API) and 
 introduces model semantics (enforces data expectations through 
 model validation).
 
@@ -9,7 +10,7 @@ model validation).
 
 ### Initialize
 
-Currently, it's a good practice toset the Promise library mongoose will
+Currently, it's a good practice to set the Promise library mongoose will
 use. Do this in initialization phase (usually initial "require" of a
 `setup-mongoose.js`, `connect.js`, etc. type module:
 
@@ -23,7 +24,7 @@ Connect using the `mongoose.connect()` method. Use the environment variable `pro
 for local mongo when developing:
 
 ```js
-const dbUri = process.env.MONGODB_URI;
+const dbUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/my-dev-db';
 mongoose.connect(dbUri);
 ```
 
@@ -58,7 +59,7 @@ const schema = new Schema({
 });
 ```
 
-Schema does not have to be flat, you can have sub-objects
+Schema does not have to be flat, you can have sub-objects:
 
 ```js
 new Schema({
@@ -74,7 +75,7 @@ new Schema({
 ```
 
 And lists of things, arrays are defined by using the Array brackets `[]` and 
-defining the contained item
+defining the contained items:
 
 ```js
 const storeSchema = new Schema({
@@ -207,11 +208,12 @@ model.save().then(model => res.send(model));
 #### Static Methods
 
 For working with the mongo database when you don't have a specific instance of a model,
-use the methods defined on the Model:
+but would like to retrieve model(s) or update them in the database, use the methods 
+defined on the Model:
 
 ```js
-MyModel.find({ type: 'bird' })
-    .then(models => ...);
+Pets.find({ type: 'bird' })
+    .then(birds => ...);
 ```
 
 #### Shaping Data
@@ -269,7 +271,52 @@ Promise.all([
 });
 ```
 
+#### Custom methods
 
+You can move logic from you route to the model by defining custom methods.
+
+##### Static methods
+
+Add top-level static methods by defining on the schema `statics` property:
+
+```js
+// assign a function to the "statics" object of our petSchema
+petSchema.statics.findByName = function(name) {
+  return this.find({ name: new RegExp(name, 'i') });
+};
+
+// use in routes via:
+Pet.findByName('fido')
+    .then(pets => ...);
+});
+```
+
+
+##### Instance methods
+
+Add model instance methods by defining on the schema `methods` property:
+
+```js
+// assign a function to the "statics" object of our petSchema
+userSchema.virtual('password').set(function(password) {
+    this.hash = bcrypt.hashSync(password, 8);
+});
+
+// use in routes via:
+User.findOne({ username: credentials.username })
+    .then(user => {
+        if(!user.comparePassword(credentials.password)) {
+            throw { code: 401 };
+        }
+        ...
+    })
+});
+```
+
+##### Other helpers
+
+See also virtual properties and custom queries
+[in the docs](http://mongoosejs.com/docs/guide.html)
 
 
 
